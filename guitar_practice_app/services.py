@@ -1,6 +1,7 @@
 from datetime import date
 
 from guitar_practice_app.models import Exercise, TempoLog
+from guitar_practice_app.tempo import duration_label, normalized_tempo
 
 
 class DuplicateExerciseError(ValueError):
@@ -52,16 +53,35 @@ class Journal:
     def exercise_names(self):
         return [exercise.name for exercise in self.exercises]
 
+    def sorted_exercise_names(self):
+        return sorted(
+            self.exercise_names(),
+            key=lambda exercise: self.max_normalized_tempo(exercise),
+        )
+
     def format_tempo(self, log):
-        return f"{log.tempo} / {log.duration}"
+        return f"{log.tempo} / {duration_label(log.duration)}"
+
+    def format_max_tempo(self, log):
+        normalized = normalized_tempo(log.tempo, log.duration)
+        return f"{self.format_tempo(log)} (={normalized})"
+
+    def max_normalized_tempo(self, exercise):
+        logs = [log for log in self.logs if log.exercise == exercise]
+        if not logs:
+            return 0
+
+        return max(normalized_tempo(log.tempo, log.duration) for log in logs)
+
+    def best_log(self, logs):
+        return max(logs, key=lambda log: normalized_tempo(log.tempo, log.duration))
 
     def max_tempo_text(self, exercise):
         logs = [log for log in self.logs if log.exercise == exercise]
         if not logs:
             return ""
 
-        best_log = max(logs, key=lambda log: log.tempo)
-        return self.format_tempo(best_log)
+        return self.format_max_tempo(self.best_log(logs))
 
     def day_tempo_text(self, log_date, exercise):
         logs = [
@@ -72,11 +92,10 @@ class Journal:
         if not logs:
             return ""
 
-        best_log = max(logs, key=lambda log: log.tempo)
-        return self.format_tempo(best_log)
+        return self.format_tempo(self.best_log(logs))
 
     def table_rows(self):
-        exercises = self.exercise_names()
+        exercises = self.sorted_exercise_names()
         if not exercises:
             return []
 
