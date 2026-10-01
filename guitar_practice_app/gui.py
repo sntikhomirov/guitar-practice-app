@@ -20,6 +20,8 @@ class GuitarPracticeApp:
         self.journal = self.load_journal()
         self.durations = DEFAULT_DURATIONS
 
+        self.configure_style()
+
         self.notebook = ttk.Notebook(root)
         self.notebook.pack(fill="both", expand=True, padx=10, pady=10)
 
@@ -33,6 +35,14 @@ class GuitarPracticeApp:
         self.create_journal_tab()
         self.refresh_exercise_list()
         self.refresh_journal_table()
+
+    def configure_style(self):
+        style = ttk.Style()
+        style.configure("TFrame", padding=4)
+        style.configure("TLabelframe", padding=8)
+        style.configure("Title.TLabel", font=("Arial", 18, "bold"))
+        style.configure("Counter.TLabel", font=("Arial", 15))
+        style.configure("Primary.TButton", padding=(12, 6))
 
     def load_journal(self):
         try:
@@ -50,26 +60,70 @@ class GuitarPracticeApp:
         self.storage.save(self.journal.exercises, self.journal.logs)
 
     def create_counter_tab(self):
+        self.counter_tab.columnconfigure(0, weight=1)
+        self.counter_tab.rowconfigure(1, weight=1)
+
+        ttk.Label(
+            self.counter_tab,
+            text="Текущее занятие",
+            style="Title.TLabel",
+        ).grid(row=0, column=0, sticky="w", padx=12, pady=(12, 4))
+
         counter_frame = ttk.Frame(self.counter_tab)
-        counter_frame.pack(expand=True)
+        counter_frame.grid(row=1, column=0, sticky="nsew", padx=12, pady=8)
+        counter_frame.columnconfigure(0, weight=1)
+        counter_frame.columnconfigure(1, weight=1)
+
+        session_frame = ttk.LabelFrame(counter_frame, text="Параметры занятия")
+        session_frame.grid(row=0, column=0, sticky="nsew", padx=(0, 8))
+        session_frame.columnconfigure(1, weight=1)
+
+        ttk.Label(session_frame, text="Упражнение:").grid(row=0, column=0, sticky="w", padx=8, pady=5)
+        self.session_exercise_combobox = ttk.Combobox(session_frame, state="readonly")
+        self.session_exercise_combobox.grid(row=0, column=1, sticky="ew", padx=8, pady=5)
+
+        ttk.Label(session_frame, text="Темп:").grid(row=1, column=0, sticky="w", padx=8, pady=5)
+        self.session_tempo_entry = ttk.Entry(session_frame)
+        self.session_tempo_entry.grid(row=1, column=1, sticky="ew", padx=8, pady=5)
+
+        ttk.Label(session_frame, text="Длительность:").grid(row=2, column=0, sticky="w", padx=8, pady=5)
+        self.session_duration_combobox = ttk.Combobox(session_frame, state="readonly", values=self.durations)
+        self.session_duration_combobox.current(0)
+        self.session_duration_combobox.grid(row=2, column=1, sticky="ew", padx=8, pady=5)
+
+        ttk.Label(session_frame, text="Дата:").grid(row=3, column=0, sticky="w", padx=8, pady=5)
+        self.session_date_entry = ttk.Entry(session_frame)
+        self.session_date_entry.insert(0, date.today().isoformat())
+        self.session_date_entry.grid(row=3, column=1, sticky="ew", padx=8, pady=5)
+
+        ttk.Button(
+            session_frame,
+            text="Сохранить занятие",
+            style="Primary.TButton",
+            command=self.save_practice_session,
+        ).grid(row=4, column=0, columnspan=2, sticky="ew", padx=8, pady=(12, 5))
+
+        stats_frame = ttk.LabelFrame(counter_frame, text="Счётчик попыток")
+        stats_frame.grid(row=0, column=1, sticky="nsew", padx=(8, 0))
+        stats_frame.columnconfigure(0, weight=1)
 
         self.label_success = tk.Label(
-            counter_frame, text="Удачно: 0 (0%)", font=("Arial", 14), fg="green"
+            stats_frame, text="Удачно: 0 (0%)", font=("Arial", 14), fg="green"
         )
-        self.label_success.pack(pady=10)
+        self.label_success.grid(row=0, column=0, pady=10)
 
         self.label_fail = tk.Label(
-            counter_frame, text="Неудачно: 0 (0%)", font=("Arial", 14), fg="red"
+            stats_frame, text="Неудачно: 0 (0%)", font=("Arial", 14), fg="red"
         )
-        self.label_fail.pack(pady=10)
+        self.label_fail.grid(row=1, column=0, pady=10)
 
         self.label_decision = tk.Label(
-            counter_frame, text="", font=("Arial", 14), fg="green"
+            stats_frame, text="", font=("Arial", 14), fg="green"
         )
-        self.label_decision.pack(pady=10)
+        self.label_decision.grid(row=2, column=0, pady=10)
 
-        btn_frame = tk.Frame(counter_frame)
-        btn_frame.pack(pady=15)
+        btn_frame = tk.Frame(stats_frame)
+        btn_frame.grid(row=3, column=0, pady=15)
 
         tk.Button(
             btn_frame,
@@ -90,11 +144,11 @@ class GuitarPracticeApp:
         ).grid(row=0, column=1, padx=20)
 
         tk.Button(
-            counter_frame,
+            stats_frame,
             text="Сбросить статистику",
             font=("Arial", 10),
             command=self.reset,
-        ).pack(pady=10)
+        ).grid(row=4, column=0, pady=10)
 
     def create_journal_tab(self):
         self.journal_tab.columnconfigure(0, weight=1)
@@ -210,12 +264,40 @@ class GuitarPracticeApp:
         self.date_entry.insert(0, date.today().isoformat())
         self.refresh_journal_table()
 
+    def save_practice_session(self):
+        if self.stats.total() == 0:
+            messagebox.showerror("Ошибка", "Нет попыток для сохранения.")
+            return
+
+        try:
+            self.journal.add_practice_session(
+                exercise=self.session_exercise_combobox.get(),
+                tempo=self.session_tempo_entry.get(),
+                duration=self.session_duration_combobox.get(),
+                log_date=self.session_date_entry.get(),
+                stats=self.stats,
+            )
+        except ValueError as error:
+            messagebox.showerror("Ошибка", str(error))
+            return
+
+        self.save_journal()
+        self.refresh_journal_table()
+        self.session_tempo_entry.delete(0, "end")
+        self.session_date_entry.delete(0, "end")
+        self.session_date_entry.insert(0, date.today().isoformat())
+        self.reset()
+        messagebox.showinfo("Журнал занятий", "Занятие сохранено.")
+
     def refresh_exercise_list(self):
         exercises = self.journal.exercise_names()
         self.exercise_combobox["values"] = exercises
+        self.session_exercise_combobox["values"] = exercises
 
         if exercises and not self.exercise_combobox.get():
             self.exercise_combobox.current(0)
+        if exercises and not self.session_exercise_combobox.get():
+            self.session_exercise_combobox.current(0)
 
     def refresh_journal_table(self):
         exercises = self.journal.sorted_exercise_names()

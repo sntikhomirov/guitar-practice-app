@@ -46,6 +46,19 @@ class JournalTest(unittest.TestCase):
 
         self.assertEqual(journal.max_tempo_text("Гамма"), "55 / 8т (=165)")
 
+    def test_add_practice_session_saves_attempt_stats(self):
+        journal = Journal()
+        journal.add_exercise("Гамма")
+        stats = AttemptStats()
+        stats.add_success()
+        stats.add_success()
+        stats.add_fail()
+
+        log = journal.add_practice_session("Гамма", 90, "восьмые", "2026-10-01", stats)
+
+        self.assertEqual(log.success, 2)
+        self.assertEqual(log.fail, 1)
+
     def test_exercises_are_sorted_by_max_normalized_tempo(self):
         journal = Journal(
             logs=[
