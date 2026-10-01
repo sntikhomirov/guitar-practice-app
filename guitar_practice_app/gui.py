@@ -12,8 +12,8 @@ class GuitarPracticeApp:
     def __init__(self, root, data_file=DATA_FILE):
         self.root = root
         self.root.title("Гитарные упражнения")
-        self.root.geometry("900x600")
-        self.root.minsize(800, 500)
+        self.root.geometry("1100x650")
+        self.root.minsize(1000, 550)
 
         self.stats = AttemptStats()
         self.storage = JournalStorage(data_file)
@@ -218,7 +218,7 @@ class GuitarPracticeApp:
             self.exercise_combobox.current(0)
 
     def refresh_journal_table(self):
-        exercises = self.journal.exercise_names()
+        exercises = self.journal.sorted_exercise_names()
         columns = ["date"] + exercises
 
         self.journal_table.delete(*self.journal_table.get_children())
@@ -229,7 +229,7 @@ class GuitarPracticeApp:
 
         for exercise in exercises:
             self.journal_table.heading(exercise, text=exercise)
-            self.journal_table.column(exercise, width=150, minwidth=120, anchor="center")
+            self.journal_table.column(exercise, width=120, minwidth=100, anchor="center")
 
         for row in self.journal.table_rows():
             self.journal_table.insert("", "end", values=row)

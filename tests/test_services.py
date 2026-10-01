@@ -31,9 +31,32 @@ class JournalTest(unittest.TestCase):
 
         rows = journal.table_rows()
 
-        self.assertEqual(rows[0], ["Максимум", "120 / восьмые"])
-        self.assertEqual(rows[1], ["2026-10-02", "120 / восьмые"])
-        self.assertEqual(rows[2], ["2026-10-01", "100 / восьмые"])
+        self.assertEqual(rows[0], ["Максимум", "120 / 8 (=240)"])
+        self.assertEqual(rows[1], ["2026-10-02", "120 / 8"])
+        self.assertEqual(rows[2], ["2026-10-01", "100 / 8"])
+
+    def test_max_tempo_uses_normalized_tempo(self):
+        journal = Journal(
+            logs=[
+                TempoLog("Гамма", 151, "четверти", "2026-10-01"),
+                TempoLog("Гамма", 55, "восьмые триоли", "2026-10-02"),
+            ]
+        )
+        journal.add_exercise("Гамма")
+
+        self.assertEqual(journal.max_tempo_text("Гамма"), "55 / 8т (=165)")
+
+    def test_exercises_are_sorted_by_max_normalized_tempo(self):
+        journal = Journal(
+            logs=[
+                TempoLog("Медленное", 40, "восьмые", "2026-10-01"),
+                TempoLog("Быстрое", 30, "шестнадцатые", "2026-10-01"),
+            ]
+        )
+        journal.add_exercise("Быстрое")
+        journal.add_exercise("Медленное")
+
+        self.assertEqual(journal.sorted_exercise_names(), ["Медленное", "Быстрое"])
 
 
 class AttemptStatsTest(unittest.TestCase):
