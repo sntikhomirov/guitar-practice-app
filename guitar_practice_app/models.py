@@ -23,6 +23,8 @@ class TempoLog:
     tempo: int
     duration: str
     date: str
+    success: int = 0
+    fail: int = 0
 
     @classmethod
     def from_dict(cls, data):
@@ -31,6 +33,8 @@ class TempoLog:
             tempo=int(data.get("tempo", 0)),
             duration=data.get("duration", ""),
             date=data.get("date", ""),
+            success=int(data.get("success", 0)),
+            fail=int(data.get("fail", 0)),
         )
 
     def to_dict(self):

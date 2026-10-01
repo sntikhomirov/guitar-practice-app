@@ -27,7 +27,7 @@ class Journal:
         self.exercises.append(exercise)
         return exercise
 
-    def add_tempo_log(self, exercise, tempo, duration, log_date):
+    def add_tempo_log(self, exercise, tempo, duration, log_date, success=0, fail=0):
         exercise = exercise.strip()
         duration = duration.strip()
         log_date = log_date.strip()
@@ -39,6 +39,11 @@ class Journal:
         if tempo <= 0:
             raise ValueError("Темп должен быть положительным целым числом.")
 
+        success = int(success)
+        fail = int(fail)
+        if success < 0 or fail < 0:
+            raise ValueError("Количество попыток не может быть отрицательным.")
+
         date.fromisoformat(log_date)
 
         log = TempoLog(
@@ -46,9 +51,21 @@ class Journal:
             tempo=tempo,
             duration=duration,
             date=log_date,
+            success=success,
+            fail=fail,
         )
         self.logs.append(log)
         return log
+
+    def add_practice_session(self, exercise, tempo, duration, log_date, stats):
+        return self.add_tempo_log(
+            exercise=exercise,
+            tempo=tempo,
+            duration=duration,
+            log_date=log_date,
+            success=stats.success,
+            fail=stats.fail,
+        )
 
     def exercise_names(self):
         return [exercise.name for exercise in self.exercises]
@@ -140,6 +157,9 @@ class AttemptStats:
 
         base = 10 if total < 10 else total
         return round((self.success / base) * 100, 1), round((self.fail / base) * 100, 1)
+
+    def total(self):
+        return self.success + self.fail
 
     def decision(self):
         total = self.success + self.fail
