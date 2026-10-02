@@ -1,4 +1,5 @@
 import unittest
+from datetime import date
 
 from guitar_practice_app.models import TempoLog
 from guitar_practice_app.services import AttemptStats, DuplicateExerciseError, Journal
@@ -70,6 +71,50 @@ class JournalTest(unittest.TestCase):
         journal.add_exercise("Медленное")
 
         self.assertEqual(journal.sorted_exercise_names(), ["Медленное", "Быстрое"])
+
+    def test_practice_plan_sorts_by_weekly_count_then_max_normalized_tempo(self):
+        journal = Journal(
+            logs=[
+                TempoLog("Редкое", 90, "четверти", "2026-09-25"),
+                TempoLog("Частое медленное", 60, "четверти", "2026-10-01"),
+                TempoLog("Частое быстрое", 50, "восьмые", "2026-10-01"),
+            ]
+        )
+        journal.add_exercise("Частое быстрое")
+        journal.add_exercise("Редкое")
+        journal.add_exercise("Частое медленное")
+
+        plan = journal.practice_plan(as_of=date(2026, 10, 2))
+
+        self.assertEqual(
+            [item.exercise for item in plan],
+            ["Редкое", "Частое медленное", "Частое быстрое"],
+        )
+
+    def test_practice_plan_start_tempo_is_last_tempo_minus_ten_percent_rounded_up(self):
+        journal = Journal(
+            logs=[
+                TempoLog("Гамма", 100, "четверти", "2026-10-01"),
+                TempoLog("Гамма", 55, "восьмые триоли", "2026-10-02"),
+            ]
+        )
+        journal.add_exercise("Гамма")
+
+        plan = journal.practice_plan(as_of=date(2026, 10, 2))
+
+        self.assertEqual(plan[0].start_tempo, 50)
+        self.assertEqual(plan[0].start_duration, "8т")
+        self.assertEqual(plan[0].last_tempo, "55 / 8т")
+
+    def test_practice_plan_supports_exercises_without_logs(self):
+        journal = Journal()
+        journal.add_exercise("Новое")
+
+        plan = journal.practice_plan(as_of=date(2026, 10, 2))
+
+        self.assertEqual(plan[0].exercise, "Новое")
+        self.assertEqual(plan[0].weekly_practice_count, 0)
+        self.assertIsNone(plan[0].start_tempo)
 
 
 class AttemptStatsTest(unittest.TestCase):

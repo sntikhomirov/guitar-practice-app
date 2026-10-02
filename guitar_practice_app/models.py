@@ -1,4 +1,5 @@
 from dataclasses import asdict, dataclass
+from typing import Optional
 
 
 @dataclass(frozen=True)
@@ -39,3 +40,15 @@ class TempoLog:
 
     def to_dict(self):
         return asdict(self)
+
+
+@dataclass(frozen=True)
+class PracticePlanItem:
+    exercise: str
+    weekly_practice_count: int
+    max_tempo: str
+    max_normalized_tempo: int
+    last_tempo: str
+    start_tempo: Optional[int]
+    start_duration: str
+    last_date: str
