@@ -27,14 +27,18 @@ class GuitarPracticeApp:
 
         self.counter_tab = ttk.Frame(self.notebook)
         self.journal_tab = ttk.Frame(self.notebook)
+        self.practice_plan_tab = ttk.Frame(self.notebook)
 
         self.notebook.add(self.counter_tab, text="Счётчик попыток")
         self.notebook.add(self.journal_tab, text="Журнал занятий")
+        self.notebook.add(self.practice_plan_tab, text="План занятия")
 
         self.create_counter_tab()
         self.create_journal_tab()
+        self.create_practice_plan_tab()
         self.refresh_exercise_list()
         self.refresh_journal_table()
+        self.refresh_practice_plan()
 
     def configure_style(self):
         style = ttk.Style()
@@ -227,6 +231,70 @@ class GuitarPracticeApp:
 
         self.journal_table.configure(yscrollcommand=y_scroll.set, xscrollcommand=x_scroll.set)
 
+    def create_practice_plan_tab(self):
+        self.practice_plan_tab.columnconfigure(0, weight=1)
+        self.practice_plan_tab.rowconfigure(1, weight=1)
+
+        header_frame = ttk.Frame(self.practice_plan_tab)
+        header_frame.grid(row=0, column=0, sticky="ew", padx=12, pady=(12, 8))
+        header_frame.columnconfigure(0, weight=1)
+
+        ttk.Label(
+            header_frame,
+            text="План занятия",
+            style="Title.TLabel",
+        ).grid(row=0, column=0, sticky="w")
+
+        ttk.Button(
+            header_frame,
+            text="Сгенерировать план",
+            style="Primary.TButton",
+            command=self.refresh_practice_plan,
+        ).grid(row=0, column=1, sticky="e")
+
+        table_frame = ttk.LabelFrame(self.practice_plan_tab, text="Упражнения")
+        table_frame.grid(row=1, column=0, sticky="nsew", padx=12, pady=(0, 12))
+        table_frame.columnconfigure(0, weight=1)
+        table_frame.rowconfigure(0, weight=1)
+
+        columns = (
+            "exercise",
+            "weekly_count",
+            "max_tempo",
+            "last_tempo",
+            "start_tempo",
+            "last_date",
+        )
+        self.practice_plan_table = ttk.Treeview(table_frame, columns=columns, show="headings")
+        self.practice_plan_table.grid(row=0, column=0, sticky="nsew")
+
+        headings = {
+            "exercise": "Упражнение",
+            "weekly_count": "За 7 дней",
+            "max_tempo": "Максимум",
+            "last_tempo": "Последний темп",
+            "start_tempo": "Стартовый темп",
+            "last_date": "Последняя дата",
+        }
+        widths = {
+            "exercise": 220,
+            "weekly_count": 90,
+            "max_tempo": 150,
+            "last_tempo": 130,
+            "start_tempo": 130,
+            "last_date": 120,
+        }
+
+        for column in columns:
+            self.practice_plan_table.heading(column, text=headings[column])
+            self.practice_plan_table.column(column, width=widths[column], minwidth=80, anchor="center")
+
+        self.practice_plan_table.column("exercise", anchor="w")
+
+        y_scroll = ttk.Scrollbar(table_frame, orient="vertical", command=self.practice_plan_table.yview)
+        y_scroll.grid(row=0, column=1, sticky="ns")
+        self.practice_plan_table.configure(yscrollcommand=y_scroll.set)
+
     def add_exercise(self):
         name = self.exercise_name_entry.get()
         description = self.exercise_description_text.get("1.0", "end")
@@ -245,6 +313,7 @@ class GuitarPracticeApp:
         self.exercise_description_text.delete("1.0", "end")
         self.refresh_exercise_list()
         self.refresh_journal_table()
+        self.refresh_practice_plan()
 
     def add_tempo_log(self):
         try:
@@ -263,6 +332,7 @@ class GuitarPracticeApp:
         self.date_entry.delete(0, "end")
         self.date_entry.insert(0, date.today().isoformat())
         self.refresh_journal_table()
+        self.refresh_practice_plan()
 
     def save_practice_session(self):
         if self.stats.total() == 0:
@@ -283,6 +353,7 @@ class GuitarPracticeApp:
 
         self.save_journal()
         self.refresh_journal_table()
+        self.refresh_practice_plan()
         self.session_tempo_entry.delete(0, "end")
         self.session_date_entry.delete(0, "end")
         self.session_date_entry.insert(0, date.today().isoformat())
@@ -315,6 +386,27 @@ class GuitarPracticeApp:
 
         for row in self.journal.table_rows():
             self.journal_table.insert("", "end", values=row)
+
+    def refresh_practice_plan(self):
+        self.practice_plan_table.delete(*self.practice_plan_table.get_children())
+
+        for item in self.journal.practice_plan():
+            start_tempo = ""
+            if item.start_tempo is not None:
+                start_tempo = f"{item.start_tempo} / {item.start_duration}"
+
+            self.practice_plan_table.insert(
+                "",
+                "end",
+                values=(
+                    item.exercise,
+                    item.weekly_practice_count,
+                    item.max_tempo,
+                    item.last_tempo,
+                    start_tempo,
+                    item.last_date,
+                ),
+            )
 
     def update_stats(self):
         p_success, p_fail = self.stats.percentages()

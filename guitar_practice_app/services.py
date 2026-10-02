@@ -1,6 +1,7 @@
-from datetime import date
+from datetime import date, timedelta
+from math import ceil
 
-from guitar_practice_app.models import Exercise, TempoLog
+from guitar_practice_app.models import Exercise, PracticePlanItem, TempoLog
 from guitar_practice_app.tempo import duration_label, normalized_tempo
 
 
@@ -125,6 +126,71 @@ class Journal:
             )
 
         return rows
+
+    def logs_for_exercise(self, exercise):
+        return [log for log in self.logs if log.exercise == exercise]
+
+    def last_log(self, exercise):
+        logs_with_index = [
+            (index, log)
+            for index, log in enumerate(self.logs)
+            if log.exercise == exercise
+        ]
+        if not logs_with_index:
+            return None
+
+        return max(logs_with_index, key=lambda item: (item[1].date, item[0]))[1]
+
+    def weekly_practice_count(self, exercise, as_of=None):
+        as_of = as_of or date.today()
+        week_start = as_of - timedelta(days=6)
+        count = 0
+
+        for log in self.logs_for_exercise(exercise):
+            log_date = date.fromisoformat(log.date)
+            if week_start <= log_date <= as_of:
+                count += 1
+
+        return count
+
+    def practice_plan(self, as_of=None):
+        as_of = as_of or date.today()
+        items = []
+
+        for exercise in self.exercise_names():
+            last_log = self.last_log(exercise)
+            start_tempo = None
+            start_duration = ""
+            last_tempo = ""
+            last_date = ""
+
+            if last_log:
+                start_tempo = ceil(last_log.tempo * 0.9)
+                start_duration = duration_label(last_log.duration)
+                last_tempo = self.format_tempo(last_log)
+                last_date = last_log.date
+
+            items.append(
+                PracticePlanItem(
+                    exercise=exercise,
+                    weekly_practice_count=self.weekly_practice_count(exercise, as_of),
+                    max_tempo=self.max_tempo_text(exercise),
+                    max_normalized_tempo=self.max_normalized_tempo(exercise),
+                    last_tempo=last_tempo,
+                    start_tempo=start_tempo,
+                    start_duration=start_duration,
+                    last_date=last_date,
+                )
+            )
+
+        return sorted(
+            items,
+            key=lambda item: (
+                item.weekly_practice_count,
+                item.max_normalized_tempo,
+                item.exercise.lower(),
+            ),
+        )
 
 
 class AttemptStats:
