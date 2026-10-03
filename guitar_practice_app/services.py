@@ -165,6 +165,8 @@ class Journal:
             last_date = ""
 
             if last_log:
+                if date.fromisoformat(last_log.date) >= as_of:
+                    continue
                 start_tempo = ceil(last_log.tempo * 0.9)
                 start_duration = duration_label(last_log.duration)
                 last_tempo = self.format_tempo(last_log)

@@ -84,7 +84,7 @@ class JournalTest(unittest.TestCase):
         journal.add_exercise("Редкое")
         journal.add_exercise("Частое медленное")
 
-        plan = journal.practice_plan(as_of=date(2026, 10, 2))
+        plan = journal.practice_plan(as_of=date(2026, 10, 3))
 
         self.assertEqual(
             [item.exercise for item in plan],
@@ -100,7 +100,7 @@ class JournalTest(unittest.TestCase):
         )
         journal.add_exercise("Гамма")
 
-        plan = journal.practice_plan(as_of=date(2026, 10, 2))
+        plan = journal.practice_plan(as_of=date(2026, 10, 3))
 
         self.assertEqual(plan[0].start_tempo, 50)
         self.assertEqual(plan[0].start_duration, "8т")
@@ -115,6 +115,23 @@ class JournalTest(unittest.TestCase):
         self.assertEqual(plan[0].exercise, "Новое")
         self.assertEqual(plan[0].weekly_practice_count, 0)
         self.assertIsNone(plan[0].start_tempo)
+
+    def test_practice_plan_hides_exercises_practiced_today_or_later(self):
+        journal = Journal(
+            logs=[
+                TempoLog("Вчера", 90, "четверти", "2026-10-01"),
+                TempoLog("Сегодня", 90, "четверти", "2026-10-02"),
+                TempoLog("Будущее", 90, "четверти", "2026-10-03"),
+            ]
+        )
+        journal.add_exercise("Вчера")
+        journal.add_exercise("Сегодня")
+        journal.add_exercise("Будущее")
+        journal.add_exercise("Без записей")
+
+        plan = journal.practice_plan(as_of=date(2026, 10, 2))
+
+        self.assertEqual([item.exercise for item in plan], ["Без записей", "Вчера"])
 
 
 class AttemptStatsTest(unittest.TestCase):
