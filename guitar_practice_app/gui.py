@@ -246,12 +246,6 @@ class GuitarPracticeApp:
             text="Следующие упражнения",
         ).grid(row=0, column=0, sticky="w")
 
-        ttk.Button(
-            header_frame,
-            text="Обновить",
-            command=self.refresh_practice_plan,
-        ).grid(row=0, column=1, sticky="e")
-
         table_frame = ttk.Frame(plan_frame)
         table_frame.grid(row=1, column=0, sticky="nsew")
         table_frame.columnconfigure(0, weight=1)
