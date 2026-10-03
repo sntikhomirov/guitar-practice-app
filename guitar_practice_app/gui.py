@@ -69,7 +69,7 @@ class GuitarPracticeApp:
 
         ttk.Label(
             self.counter_tab,
-            text="Текущее занятие",
+            text="Текущее упражнение",
             style="Title.TLabel",
         ).grid(row=0, column=0, sticky="w", padx=12, pady=(12, 4))
 
@@ -78,11 +78,11 @@ class GuitarPracticeApp:
         counter_frame.columnconfigure(0, weight=1)
         counter_frame.columnconfigure(1, weight=1)
 
-        session_frame = ttk.LabelFrame(counter_frame, text="Параметры занятия")
+        session_frame = ttk.LabelFrame(counter_frame, text="Параметры упражнения")
         session_frame.grid(row=0, column=0, sticky="nsew", padx=(0, 8))
         session_frame.columnconfigure(1, weight=1)
 
-        ttk.Label(session_frame, text="Упражнение:").grid(row=0, column=0, sticky="w", padx=8, pady=5)
+        ttk.Label(session_frame, text="Название:").grid(row=0, column=0, sticky="w", padx=8, pady=5)
         self.session_exercise_combobox = ttk.Combobox(session_frame, state="readonly")
         self.session_exercise_combobox.grid(row=0, column=1, sticky="ew", padx=8, pady=5)
 

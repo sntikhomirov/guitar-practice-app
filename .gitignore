@@ -1,6 +1,7 @@
 __pycache__/
 *.py[cod]
 .DS_Store
+.idea/
 
 # Личные данные журнала занятий
 journal_data.json
