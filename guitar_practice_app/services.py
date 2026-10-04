@@ -2,6 +2,7 @@ from datetime import date, timedelta
 from math import ceil
 
 from guitar_practice_app.models import Exercise, PracticePlanItem, TempoLog
+from guitar_practice_app.settings import DEFAULT_DURATIONS
 from guitar_practice_app.tempo import duration_label, normalized_tempo
 
 
@@ -28,7 +29,7 @@ class Journal:
         self.exercises.append(exercise)
         return exercise
 
-    def add_tempo_log(self, exercise, tempo, duration, log_date, success=0, fail=0):
+    def _make_tempo_log(self, exercise, tempo, duration, log_date, success=0, fail=0):
         exercise = exercise.strip()
         duration = duration.strip()
         log_date = log_date.strip()
@@ -36,27 +37,66 @@ class Journal:
         if not exercise:
             raise ValueError("Выберите упражнение.")
 
-        tempo = int(tempo)
+        try:
+            tempo = int(tempo)
+        except (TypeError, ValueError):
+            raise ValueError("Темп должен быть положительным целым числом.") from None
         if tempo <= 0:
             raise ValueError("Темп должен быть положительным целым числом.")
 
-        success = int(success)
-        fail = int(fail)
+        try:
+            success = int(success)
+            fail = int(fail)
+        except (TypeError, ValueError):
+            raise ValueError("Количество попыток должно быть целым числом.") from None
         if success < 0 or fail < 0:
             raise ValueError("Количество попыток не может быть отрицательным.")
 
-        date.fromisoformat(log_date)
+        try:
+            parsed_date = date.fromisoformat(log_date)
+        except ValueError:
+            raise ValueError("Введите дату в формате ГГГГ-ММ-ДД.") from None
+
+        if duration not in DEFAULT_DURATIONS:
+            raise ValueError("Выберите длительность из списка.")
 
         log = TempoLog(
             exercise=exercise,
             tempo=tempo,
             duration=duration,
-            date=log_date,
+            date=parsed_date.isoformat(),
             success=success,
             fail=fail,
         )
+        return log
+
+    def add_tempo_log(self, exercise, tempo, duration, log_date, success=0, fail=0):
+        log = self._make_tempo_log(exercise, tempo, duration, log_date, success, fail)
         self.logs.append(log)
         return log
+
+    def exercise_history(self, exercise):
+        """Return (list index, record) pairs, newest first, including duplicates."""
+        records = [(index, log) for index, log in enumerate(self.logs)
+                   if log.exercise == exercise]
+        return sorted(records, key=lambda item: (item[1].date, item[0]), reverse=True)
+
+    def update_tempo_log(self, index, tempo, duration, log_date, success=0, fail=0):
+        original = self._log_at(index)
+        replacement = self._make_tempo_log(
+            original.exercise, tempo, duration, log_date, success, fail,
+        )
+        self.logs[index] = replacement
+        return replacement
+
+    def _log_at(self, index):
+        if not isinstance(index, int) or not 0 <= index < len(self.logs):
+            raise ValueError("Запись не найдена.")
+        return self.logs[index]
+
+    def delete_tempo_log(self, index):
+        self._log_at(index)
+        return self.logs.pop(index)
 
     def add_practice_session(self, exercise, tempo, duration, log_date, stats):
         return self.add_tempo_log(
@@ -239,7 +279,7 @@ class AttemptStats:
         if p_fail > 50 or total > 30 or self.fail_streak >= 5:
             return "Убавляем", "red"
 
-        if p_success >= 70 or self.success_streak >= 5:
+        if p_success >= 70 or (self.success_streak >= 5 and self.fail == 0):
             return "Прибавляем", "green"
 
         return "", "green"

@@ -3,6 +3,7 @@ import tkinter as tk
 from datetime import date
 from tkinter import messagebox, ttk
 
+from guitar_practice_app.history_ui import ExerciseHistoryWindow
 from guitar_practice_app.services import AttemptStats, DuplicateExerciseError, Journal
 from guitar_practice_app.settings import DATA_FILE, DEFAULT_DURATIONS
 from guitar_practice_app.storage import JournalStorage
@@ -32,6 +33,7 @@ class GuitarPracticeApp:
         self.notebook.add(self.journal_tab, text="Журнал занятий")
 
         self.create_counter_tab()
+        self.update_stats()
         self.create_journal_tab()
         self.refresh_exercise_list()
         self.refresh_journal_table()
@@ -166,6 +168,25 @@ class GuitarPracticeApp:
         self.create_exercise_form(forms_frame)
         self.create_tempo_form(forms_frame)
         self.create_table()
+
+        history_bar = ttk.Frame(self.journal_tab)
+        history_bar.grid(row=2, column=0, sticky="ew", pady=8)
+        ttk.Label(history_bar, text="История упражнения:").pack(side="left", padx=8)
+        self.history_exercise_combobox = ttk.Combobox(history_bar, state="readonly", width=30)
+        self.history_exercise_combobox.pack(side="left", padx=8)
+        ttk.Button(history_bar, text="Открыть историю", command=self.open_exercise_history).pack(side="left")
+
+    def open_exercise_history(self):
+        exercise = self.history_exercise_combobox.get()
+        if not exercise:
+            messagebox.showerror("История", "Выберите упражнение.")
+            return
+        ExerciseHistoryWindow(self.root, self.journal, exercise, self.on_history_changed)
+
+    def on_history_changed(self):
+        self.save_journal()
+        self.refresh_journal_table()
+        self.refresh_practice_plan(prefill=self.stats.total() == 0)
 
     def create_exercise_form(self, parent):
         exercise_frame = ttk.LabelFrame(parent, text="Добавить упражнение")
@@ -349,11 +370,14 @@ class GuitarPracticeApp:
         exercises = self.journal.exercise_names()
         self.exercise_combobox["values"] = exercises
         self.session_exercise_combobox["values"] = exercises
+        self.history_exercise_combobox["values"] = exercises
 
         if exercises and not self.exercise_combobox.get():
             self.exercise_combobox.current(0)
         if exercises and not self.session_exercise_combobox.get():
             self.session_exercise_combobox.current(0)
+        if exercises and not self.history_exercise_combobox.get():
+            self.history_exercise_combobox.current(0)
 
     def refresh_journal_table(self):
         exercises = self.journal.sorted_exercise_names()
