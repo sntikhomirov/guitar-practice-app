@@ -1,7 +1,9 @@
 from datetime import date, timedelta
+from dataclasses import replace
 from math import ceil
 
-from guitar_practice_app.models import Exercise, PracticePlanItem, TempoLog
+from guitar_practice_app.cycles import cycle_start
+from guitar_practice_app.models import Exercise, GoalProgress, PracticePlanItem, TempoLog
 from guitar_practice_app.settings import DEFAULT_DURATIONS
 from guitar_practice_app.tempo import duration_label, normalized_tempo
 
@@ -111,6 +113,69 @@ class Journal:
     def exercise_names(self):
         return [exercise.name for exercise in self.exercises]
 
+    def exercise_by_name(self, name):
+        for exercise in self.exercises:
+            if exercise.name == name:
+                return exercise
+        raise ValueError("Упражнение не найдено.")
+
+    def set_exercise_goal(self, name, tempo, duration, kind="weekly", as_of=None):
+        exercise = self.exercise_by_name(name)
+        if kind not in ("weekly", "total"):
+            raise ValueError("Неизвестный тип цели.")
+        if isinstance(tempo, str):
+            try:
+                tempo = int(tempo.strip())
+            except ValueError:
+                raise ValueError("Целевой темп должен быть положительным целым числом.") from None
+        if kind == "total":
+            replacement = replace(exercise, total_target_tempo=tempo, total_target_duration=duration)
+        else:
+            replacement = replace(exercise, target_tempo=tempo, target_duration=duration,
+                                  target_week_start=cycle_start(as_of).isoformat())
+        self.exercises[self.exercises.index(exercise)] = replacement
+        return replacement
+
+    def clear_exercise_goal(self, name, kind="weekly", as_of=None):
+        exercise = self.exercise_by_name(name)
+        if kind == "total":
+            replacement = replace(exercise, total_target_tempo=None, total_target_duration="")
+        elif kind == "weekly":
+            start = cycle_start(as_of).isoformat()
+            fields = {"weekly_goals": tuple(goal for goal in exercise.weekly_goals if goal.week_start != start)}
+            if exercise.target_week_start == start:
+                fields.update(target_tempo=None, target_duration="", target_week_start="")
+            replacement = replace(exercise, **fields)
+        else:
+            raise ValueError("Неизвестный тип цели.")
+        self.exercises[self.exercises.index(exercise)] = replacement
+        return replacement
+
+    def goal_progress(self, name, kind="weekly", as_of=None):
+        as_of = as_of or date.today()
+        exercise = self.exercise_by_name(name)
+        logs = self.logs_for_exercise(name)
+        start = ""
+        if kind == "total":
+            tempo, duration = exercise.total_target_tempo, exercise.total_target_duration
+        elif kind == "weekly":
+            start = cycle_start(as_of).isoformat()
+            goal = next((goal for goal in exercise.weekly_goals if goal.week_start == start), None)
+            tempo, duration = (goal.tempo, goal.duration) if goal else (None, "")
+            logs = [log for log in logs if start <= log.date <= as_of.isoformat()]
+        else:
+            raise ValueError("Неизвестный тип цели.")
+        best = self.best_log(logs) if logs else None
+        return GoalProgress(
+            exercise=exercise,
+            maximum_text=self.format_max_tempo(best) if best else "",
+            maximum_normalized=normalized_tempo(best.tempo, best.duration) if best else 0,
+            target_normalized=normalized_tempo(tempo, duration) if tempo is not None else None,
+            target_tempo=tempo,
+            target_duration=duration,
+            week_start=start,
+        )
+
     def sorted_exercise_names(self):
         return sorted(
             self.exercise_names(),
@@ -198,6 +263,8 @@ class Journal:
         items = []
 
         for exercise in self.exercise_names():
+            if self.goal_progress(exercise, as_of=as_of).reached:
+                continue
             last_log = self.last_log(exercise)
             start_tempo = None
             start_duration = ""

@@ -4,6 +4,7 @@ from datetime import date
 from tkinter import messagebox, ttk
 
 from guitar_practice_app.history_ui import ExerciseHistoryWindow
+from guitar_practice_app.goals_ui import ExerciseGoalsPanel
 from guitar_practice_app.services import AttemptStats, DuplicateExerciseError, Journal
 from guitar_practice_app.settings import DATA_FILE, DEFAULT_DURATIONS
 from guitar_practice_app.storage import JournalStorage
@@ -28,13 +29,16 @@ class GuitarPracticeApp:
 
         self.counter_tab = ttk.Frame(self.notebook)
         self.journal_tab = ttk.Frame(self.notebook)
+        self.goals_tab = ttk.Frame(self.notebook)
 
         self.notebook.add(self.counter_tab, text="Счётчик попыток")
         self.notebook.add(self.journal_tab, text="Журнал занятий")
+        self.notebook.add(self.goals_tab, text="Цели")
 
         self.create_counter_tab()
         self.update_stats()
         self.create_journal_tab()
+        self.create_goals_tab()
         self.refresh_exercise_list()
         self.refresh_journal_table()
         self.refresh_practice_plan()
@@ -114,20 +118,20 @@ class GuitarPracticeApp:
         self.label_success = tk.Label(
             stats_frame, text="Удачно: 0 (0%)", font=("Arial", 14), fg="green"
         )
-        self.label_success.grid(row=0, column=0, pady=10)
+        self.label_success.grid(row=0, column=0, pady=5)
 
         self.label_fail = tk.Label(
             stats_frame, text="Неудачно: 0 (0%)", font=("Arial", 14), fg="red"
         )
-        self.label_fail.grid(row=1, column=0, pady=10)
+        self.label_fail.grid(row=1, column=0, pady=5)
 
         self.label_decision = tk.Label(
             stats_frame, text="", font=("Arial", 14), fg="green"
         )
-        self.label_decision.grid(row=2, column=0, pady=10)
+        self.label_decision.grid(row=2, column=0, pady=5)
 
         btn_frame = tk.Frame(stats_frame)
-        btn_frame.grid(row=3, column=0, pady=15)
+        btn_frame.grid(row=3, column=0, pady=5)
 
         tk.Button(
             btn_frame,
@@ -152,7 +156,7 @@ class GuitarPracticeApp:
             text="Сбросить статистику",
             font=("Arial", 10),
             command=self.reset,
-        ).grid(row=4, column=0, pady=10)
+        ).grid(row=4, column=0, pady=5)
 
         self.create_practice_plan_panel(counter_frame)
 
@@ -175,6 +179,20 @@ class GuitarPracticeApp:
         self.history_exercise_combobox = ttk.Combobox(history_bar, state="readonly", width=30)
         self.history_exercise_combobox.pack(side="left", padx=8)
         ttk.Button(history_bar, text="Открыть историю", command=self.open_exercise_history).pack(side="left")
+
+    def create_goals_tab(self):
+        ttk.Label(self.goals_tab, text="Цели упражнений", style="Title.TLabel").pack(
+            anchor="w", padx=12, pady=(12, 4),
+        )
+        ttk.Label(self.goals_tab, text="Общая цель — вся история. Недельная — текущий цикл со среды по вторник.").pack(
+            anchor="w", padx=12, pady=(0, 8),
+        )
+        self.goals_panel = ExerciseGoalsPanel(self.goals_tab, self.journal, self.on_goals_changed)
+        self.goals_panel.pack(fill="both", expand=True, padx=12, pady=8)
+
+    def on_goals_changed(self):
+        self.save_journal()
+        self.refresh_practice_plan(prefill=self.stats.total() == 0)
 
     def open_exercise_history(self):
         exercise = self.history_exercise_combobox.get()
@@ -278,7 +296,7 @@ class GuitarPracticeApp:
             "weekly_count",
             "last_date",
         )
-        self.practice_plan_table = ttk.Treeview(table_frame, columns=columns, show="headings")
+        self.practice_plan_table = ttk.Treeview(table_frame, columns=columns, show="headings", height=6)
         self.practice_plan_table.grid(row=0, column=0, sticky="nsew")
 
         headings = {
@@ -300,9 +318,16 @@ class GuitarPracticeApp:
 
         self.practice_plan_table.column("exercise", anchor="w")
 
-        y_scroll = ttk.Scrollbar(table_frame, orient="vertical", command=self.practice_plan_table.yview)
-        y_scroll.grid(row=0, column=1, sticky="ns")
-        self.practice_plan_table.configure(yscrollcommand=y_scroll.set)
+        self.plan_scrollbar = ttk.Scrollbar(table_frame, orient="vertical", command=self.practice_plan_table.yview)
+        self.plan_scrollbar.grid(row=0, column=1, sticky="ns")
+        self.practice_plan_table.configure(yscrollcommand=self.update_plan_scrollbar)
+
+    def update_plan_scrollbar(self, first, last):
+        self.plan_scrollbar.set(first, last)
+        if float(first) <= 0 and float(last) >= 1:
+            self.plan_scrollbar.grid_remove()
+        else:
+            self.plan_scrollbar.grid()
 
     def add_exercise(self):
         name = self.exercise_name_entry.get()
@@ -380,6 +405,7 @@ class GuitarPracticeApp:
             self.history_exercise_combobox.current(0)
 
     def refresh_journal_table(self):
+        self.goals_panel.refresh()
         exercises = self.journal.sorted_exercise_names()
         columns = ["date"] + exercises
 
