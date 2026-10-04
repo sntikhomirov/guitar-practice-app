@@ -3,7 +3,15 @@
   "exercises": [
     {
       "name": "Название упражнения",
-      "description": "Описание упражнения"
+      "description": "Описание упражнения",
+      "target_tempo": 150,
+      "target_duration": "восьмые",
+      "target_week_start": "2026-09-30",
+      "weekly_goals": [
+        {"week_start": "2026-09-30", "tempo": 150, "duration": "восьмые"}
+      ],
+      "total_target_tempo": 120,
+      "total_target_duration": "шестнадцатые"
     }
   ],
   "logs": [

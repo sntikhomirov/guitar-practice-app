@@ -83,7 +83,7 @@ class HistoryWorkflowTest(unittest.TestCase):
         with patch.multiple(
             GuitarPracticeApp,
             configure_style=Mock(), load_journal=Mock(return_value=Journal()),
-            create_counter_tab=Mock(), create_journal_tab=Mock(),
+            create_counter_tab=Mock(), create_journal_tab=Mock(), create_goals_tab=Mock(),
             refresh_exercise_list=Mock(), refresh_journal_table=Mock(),
             refresh_practice_plan=Mock(), update_stats=Mock(),
         ), patch("guitar_practice_app.gui.ttk.Notebook"), patch("guitar_practice_app.gui.ttk.Frame"):
