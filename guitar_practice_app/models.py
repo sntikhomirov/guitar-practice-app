@@ -43,8 +43,11 @@ class Exercise:
     weekly_goals: tuple = ()
     total_target_tempo: Optional[int] = None
     total_target_duration: str = ""
+    archived: bool = False
 
     def __post_init__(self):
+        if type(self.archived) is not bool:
+            raise ValueError("Статус архива должен быть логическим значением.")
         validate_goal(self.target_tempo, self.target_duration)
         validate_goal(self.total_target_tempo, self.total_target_duration)
         if self.target_tempo is not None:
@@ -65,6 +68,7 @@ class Exercise:
             weekly_goals=tuple(WeeklyGoal(**item) for item in data.get("weekly_goals", [])),
             total_target_tempo=data.get("total_target_tempo"),
             total_target_duration=data.get("total_target_duration", ""),
+            archived=data.get("archived", False),
         )
 
     def to_dict(self):

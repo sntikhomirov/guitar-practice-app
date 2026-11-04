@@ -3,6 +3,7 @@
   "exercises": [
     {
       "name": "Название упражнения",
+      "archived": false,
       "description": "Описание упражнения",
       "target_tempo": 150,
       "target_duration": "восьмые",

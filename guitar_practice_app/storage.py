@@ -1,4 +1,7 @@
 import json
+import os
+import tempfile
+from pathlib import Path
 
 from guitar_practice_app.models import Exercise, TempoLog
 
@@ -28,5 +31,18 @@ class JournalStorage:
             "logs": [log.to_dict() for log in logs],
         }
 
-        with self.path.open("w", encoding="utf-8") as file:
-            json.dump(data, file, ensure_ascii=False, indent=2)
+        temporary_path = None
+        try:
+            # Same directory keeps replacement on the same filesystem.
+            with tempfile.NamedTemporaryFile(
+                mode="w", encoding="utf-8", dir=self.path.parent,
+                prefix=f".{self.path.name}.", suffix=".tmp", delete=False,
+            ) as file:
+                temporary_path = Path(file.name)
+                json.dump(data, file, ensure_ascii=False, indent=2)
+                file.flush()
+                os.fsync(file.fileno())
+            os.replace(temporary_path, self.path)
+        finally:
+            if temporary_path is not None:
+                temporary_path.unlink(missing_ok=True)

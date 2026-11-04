@@ -48,7 +48,8 @@ class ExerciseGoalsPanel(ttk.LabelFrame):
         current = cycle_start().isoformat()
         cycles = {current}
         for exercise in self.journal.exercises:
-            cycles.update(goal.week_start for goal in exercise.weekly_goals if goal.week_start <= current)
+            if not exercise.archived:
+                cycles.update(goal.week_start for goal in exercise.weekly_goals if goal.week_start <= current)
         if self.selected_cycle:
             cycles.add(self.selected_cycle)
         self.cycle_options = sorted(cycles, reverse=True)

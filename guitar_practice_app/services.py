@@ -73,6 +73,11 @@ class Journal:
         return log
 
     def add_tempo_log(self, exercise, tempo, duration, log_date, success=0, fail=0):
+        if not exercise.strip():
+            raise ValueError("Выберите упражнение.")
+        selected = self.exercise_by_name(exercise.strip())
+        if selected.archived:
+            raise ValueError("Упражнение в архиве. Сначала восстановите его.")
         log = self._make_tempo_log(exercise, tempo, duration, log_date, success, fail)
         self.logs.append(log)
         return log
@@ -110,8 +115,23 @@ class Journal:
             fail=stats.fail,
         )
 
-    def exercise_names(self):
-        return [exercise.name for exercise in self.exercises]
+    def exercise_names(self, include_archived=False):
+        return [exercise.name for exercise in self.exercises if include_archived or not exercise.archived]
+
+    def archived_exercises(self):
+        return sorted((exercise for exercise in self.exercises if exercise.archived), key=lambda item: item.name.lower())
+
+    def archive_exercise(self, name):
+        exercise = self.exercise_by_name(name)
+        replacement = replace(exercise, archived=True)
+        self.exercises[self.exercises.index(exercise)] = replacement
+        return replacement
+
+    def restore_exercise(self, name):
+        exercise = self.exercise_by_name(name)
+        replacement = replace(exercise, archived=False)
+        self.exercises[self.exercises.index(exercise)] = replacement
+        return replacement
 
     def exercise_by_name(self, name):
         for exercise in self.exercises:
@@ -223,7 +243,8 @@ class Journal:
             return []
 
         rows = [["Максимум"] + [self.max_tempo_text(exercise) for exercise in exercises]]
-        dates = sorted({log.date for log in self.logs}, reverse=True)
+        active_names = set(exercises)
+        dates = sorted({log.date for log in self.logs if log.exercise in active_names}, reverse=True)
 
         for log_date in dates:
             rows.append(

@@ -3,6 +3,7 @@ import tkinter as tk
 from datetime import date
 from tkinter import messagebox, ttk
 
+from guitar_practice_app.archive_ui import ExerciseArchiveWindow
 from guitar_practice_app.history_ui import ExerciseHistoryWindow
 from guitar_practice_app.goals_ui import ExerciseGoalsPanel
 from guitar_practice_app.services import AttemptStats, DuplicateExerciseError, Journal
@@ -179,6 +180,44 @@ class GuitarPracticeApp:
         self.history_exercise_combobox = ttk.Combobox(history_bar, state="readonly", width=30)
         self.history_exercise_combobox.pack(side="left", padx=8)
         ttk.Button(history_bar, text="Открыть историю", command=self.open_exercise_history).pack(side="left")
+        ttk.Button(history_bar, text="В архив", command=self.archive_selected_exercise).pack(side="left", padx=8)
+        ttk.Button(history_bar, text="Архив упражнений", command=self.open_archive).pack(side="right")
+
+    def archive_selected_exercise(self):
+        name = self.history_exercise_combobox.get()
+        if not name:
+            messagebox.showerror("Архив", "Выберите упражнение.")
+            return
+        if self.stats.total() and self.session_exercise_combobox.get() == name:
+            messagebox.showerror("Архив", "Сначала сохраните или сбросьте текущие попытки.")
+            return
+        if not messagebox.askyesno("В архив?", f"Убрать «{name}» из активных упражнений?\nИстория и цели сохранятся.", parent=self.root):
+            return
+        try:
+            self.set_exercise_archived(name, True)
+        except (ValueError, OSError) as error:
+            messagebox.showerror("Не удалось архивировать", str(error), parent=self.root)
+
+    def set_exercise_archived(self, name, archived):
+        if archived and self.stats.total() and self.session_exercise_combobox.get() == name:
+            raise ValueError("Сначала сохраните или сбросьте текущие попытки.")
+        original = list(self.journal.exercises)
+        try:
+            if archived:
+                self.journal.archive_exercise(name)
+            else:
+                self.journal.restore_exercise(name)
+            self.save_journal()
+        except (ValueError, OSError):
+            self.journal.exercises[:] = original
+            raise
+        self.refresh_exercise_list()
+        self.refresh_journal_table()
+        self.refresh_practice_plan(prefill=self.stats.total() == 0)
+
+    def open_archive(self):
+        ExerciseArchiveWindow(self.root, self.journal,
+                              lambda name: self.set_exercise_archived(name, False), self.on_history_changed)
 
     def create_goals_tab(self):
         ttk.Label(self.goals_tab, text="Цели упражнений", style="Title.TLabel").pack(
@@ -393,16 +432,10 @@ class GuitarPracticeApp:
 
     def refresh_exercise_list(self):
         exercises = self.journal.exercise_names()
-        self.exercise_combobox["values"] = exercises
-        self.session_exercise_combobox["values"] = exercises
-        self.history_exercise_combobox["values"] = exercises
-
-        if exercises and not self.exercise_combobox.get():
-            self.exercise_combobox.current(0)
-        if exercises and not self.session_exercise_combobox.get():
-            self.session_exercise_combobox.current(0)
-        if exercises and not self.history_exercise_combobox.get():
-            self.history_exercise_combobox.current(0)
+        for combobox in (self.exercise_combobox, self.session_exercise_combobox, self.history_exercise_combobox):
+            combobox["values"] = exercises
+            if combobox.get() not in exercises:
+                combobox.set(exercises[0] if exercises else "")
 
     def refresh_journal_table(self):
         self.goals_panel.refresh()
