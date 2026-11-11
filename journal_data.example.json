@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "exercises": [
     {
       "name": "Название упражнения",
@@ -22,7 +22,11 @@
       "duration": "восьмые",
       "date": "2026-10-01",
       "success": 8,
-      "fail": 2
+      "fail": 2,
+      "session_id": "example-session-1"
     }
+  ],
+  "sessions": [
+    {"id": "example-session-1", "exercise": "Название упражнения", "date": "2026-10-01", "status": "completed"}
   ]
 }

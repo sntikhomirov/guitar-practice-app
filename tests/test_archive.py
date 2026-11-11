@@ -9,6 +9,7 @@ from unittest.mock import Mock, patch
 from guitar_practice_app.archive_ui import ExerciseArchiveWindow
 from guitar_practice_app.gui import GuitarPracticeApp
 from guitar_practice_app.models import Exercise, TempoLog
+from guitar_practice_app.practice import PracticeController
 from guitar_practice_app.services import AttemptStats, DuplicateExerciseError, Journal
 from guitar_practice_app.storage import JournalStorage
 
@@ -138,6 +139,7 @@ class ArchiveWorkflowTest(unittest.TestCase):
         app.history_exercise_combobox = Mock()
         app.history_exercise_combobox.get.return_value = "Гамма"
         app.save_journal = Mock()
+        app.practice = PracticeController(app.journal, app.save_journal, app.stats)
         app.refresh_exercise_list = Mock()
         app.refresh_journal_table = Mock()
         app.refresh_practice_plan = Mock()
