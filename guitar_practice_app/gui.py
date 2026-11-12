@@ -497,7 +497,8 @@ class GuitarPracticeApp:
             self.session_date_entry.insert(0, session.date)
             self.session_date_entry.configure(state="readonly")
         if self._session_parameters is not None:
-            self._session_parameters = self.read_session_parameters()
+            # A history refresh must not confirm pending edits to other fields.
+            self._session_parameters = (*self._session_parameters[:3], self.session_date_entry.get())
 
     def on_session_parameters_changed(self, event=None):
         self.resolve_session_parameters()

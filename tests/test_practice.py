@@ -324,6 +324,36 @@ class PracticeWorkflowTest(unittest.TestCase):
         self.assertEqual(app.session_tempo_entry.get(), "90")
         self.assertEqual(app.stats.total(), 0)
 
+    def test_history_edit_does_not_accept_unconfirmed_tempo_for_active_attempts(self):
+        app = self.app
+        app.stats.add_success()
+        app.save_practice_session()
+        app.stats.add_fail()
+        app.session_tempo_entry.set("100")
+        app.journal.update_tempo_log(0, 85, "восьмые", "2026-11-11", 1, 0)
+        app.on_history_changed()
+
+        self.assertEqual(app._session_parameters[1], "80")
+        self.assertEqual(app.session_tempo_entry.get(), "100")
+        self.assertEqual(app.stats.fail, 1)
+        with patch("guitar_practice_app.gui.ask_unsaved_attempts", return_value="save") as prompt:
+            app.save_practice_session()
+        prompt.assert_called_once_with(app.root)
+        self.assertEqual([log.tempo for log in app.journal.logs], [85, 80])
+        self.assertEqual(app.journal.logs[-1].fail, 1)
+
+    def test_date_sync_preserves_confirmed_exercise_tempo_and_duration(self):
+        app = self.app
+        app.stats.add_success()
+        app.save_practice_session()
+        app.session_exercise_combobox.set("Легато")
+        app.session_tempo_entry.set("100")
+        app.session_duration_combobox.set("четверти")
+        app.journal.update_tempo_log(0, 80, "восьмые", "2026-11-10", 1, 0)
+        app.sync_session_date()
+        self.assertEqual(app._session_parameters, ("Гамма", "80", "восьмые", "2026-11-10"))
+        self.assertEqual(app.read_session_parameters(), ("Легато", "100", "четверти", "2026-11-10"))
+
     def test_parameter_change_cancel_restores_previous_values_and_attempts(self):
         app = self.app
         app.stats.add_fail()
