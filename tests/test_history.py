@@ -39,8 +39,10 @@ class ExerciseHistoryTest(unittest.TestCase):
         self.assertEqual(self.journal.exercise_history("Нет записей"), [])
 
     def test_update_preserves_exercise_and_list_position(self):
+        session_id = self.journal.logs[2].session_id
         replacement = self.journal.update_tempo_log(2, "110", "восьмые триоли", "2026-10-03", "5", "2")
-        self.assertEqual(replacement, TempoLog("Гамма", 110, "восьмые триоли", "2026-10-03", 5, 2))
+        self.assertEqual(replacement, TempoLog("Гамма", 110, "восьмые триоли", "2026-10-03", 5, 2,
+                                               session_id=session_id))
         self.assertEqual(len(self.journal.logs), 4)
         self.assertEqual(self.journal.logs[3].tempo, 90)
         self.assertEqual(self.journal.max_tempo_text("Гамма"), "110 / 8т (=330)")
@@ -96,6 +98,7 @@ class HistoryWorkflowTest(unittest.TestCase):
         app.save_journal = Mock()
         app.refresh_journal_table = Mock()
         app.refresh_practice_plan = Mock()
+        app.sync_session_date = Mock()
         app.stats.add_success()
         app.on_history_changed()
         app.refresh_practice_plan.assert_called_once_with(prefill=False)
@@ -106,6 +109,7 @@ class HistoryWorkflowTest(unittest.TestCase):
         app.save_journal = Mock()
         app.refresh_journal_table = Mock()
         app.refresh_practice_plan = Mock()
+        app.sync_session_date = Mock()
         app.on_history_changed()
         app.refresh_practice_plan.assert_called_once_with(prefill=True)
 

@@ -105,6 +105,7 @@ class TempoLog:
     date: str
     success: int = 0
     fail: int = 0
+    session_id: str = ""
 
     @classmethod
     def from_dict(cls, data):
@@ -115,7 +116,29 @@ class TempoLog:
             date=data.get("date", ""),
             success=int(data.get("success", 0)),
             fail=int(data.get("fail", 0)),
+            session_id=data.get("session_id", ""),
         )
+
+    def to_dict(self):
+        return asdict(self)
+
+
+@dataclass(frozen=True)
+class PracticeSession:
+    id: str
+    exercise: str
+    date: str
+    status: str = "in_progress"
+
+    def __post_init__(self):
+        if not self.id or self.status not in ("in_progress", "interrupted", "completed"):
+            raise ValueError("Некорректная отработка упражнения.")
+        if date.fromisoformat(self.date).isoformat() != self.date:
+            raise ValueError("Некорректная дата отработки.")
+
+    @classmethod
+    def from_dict(cls, data):
+        return cls(**data)
 
     def to_dict(self):
         return asdict(self)

@@ -31,11 +31,14 @@ class ExerciseHistoryWindow:
         table_frame.columnconfigure(0, weight=1)
         table_frame.rowconfigure(0, weight=1)
         columns = ("date", "tempo", "normalized", "success", "fail")
-        self.table = ttk.Treeview(table_frame, columns=columns, show="headings", selectmode="browse")
+        self.table = ttk.Treeview(table_frame, columns=columns, show="tree headings", selectmode="browse")
         self.table.grid(row=0, column=0, sticky="nsew")
+        self.table.heading("#0", text="Отработка / результат")
+        self.table.column("#0", width=230, minwidth=160)
         for column, title in zip(columns, ("Дата", "Темп", "В четвертях", "Удачно", "Неудачно")):
             self.table.heading(column, text=title)
-            self.table.column(column, width=120, minwidth=80, anchor="center")
+            self.table.column(column, width=100 if column in ("date", "tempo", "normalized") else 65,
+                              minwidth=55, anchor="center")
         scroll = ttk.Scrollbar(table_frame, orient="vertical", command=self.table.yview)
         scroll.grid(row=0, column=1, sticky="ns")
         self.table.configure(yscrollcommand=scroll.set)
@@ -67,11 +70,17 @@ class ExerciseHistoryWindow:
     def refresh(self):
         self.selected_index = None
         self.table.delete(*self.table.get_children())
-        for index, log in self.journal.exercise_history(self.exercise):
-            self.table.insert("", "end", iid=str(index), values=(
-                log.date, self.journal.format_tempo(log),
-                normalized_tempo(log.tempo, log.duration), log.success, log.fail,
-            ))
+        statuses = {"in_progress": "В процессе", "interrupted": "Прервана", "completed": "Завершена"}
+        sessions = self.journal.sessions_for_exercise(self.exercise)
+        for number, session in enumerate(sessions):
+            parent = f"session:{session.id}"
+            self.table.insert("", "end", iid=parent, text=f"Отработка {len(sessions) - number} · {statuses[session.status]}",
+                              open=True, values=(session.date, "", "", "", ""))
+            for index, log in self.journal.session_results(session.id):
+                self.table.insert(parent, "end", iid=str(index), text="Результат", values=(
+                    log.date, self.journal.format_tempo(log),
+                    normalized_tempo(log.tempo, log.duration), log.success, log.fail,
+                ))
         for field in self.fields.values():
             if isinstance(field, ttk.Combobox):
                 field.set("")
@@ -82,7 +91,10 @@ class ExerciseHistoryWindow:
 
     def select_record(self, event=None):
         selection = self.table.selection()
-        if not selection:
+        self.selected_index = None
+        if not selection or selection[0].startswith("session:"):
+            self.save_button.state(["disabled"])
+            self.delete_button.state(["disabled"])
             return
         self.selected_index = int(selection[0])
         log = self.journal.logs[self.selected_index]
@@ -98,11 +110,13 @@ class ExerciseHistoryWindow:
 
     def apply_change(self, change):
         original_logs = list(self.journal.logs)
+        original_sessions = list(self.journal.sessions)
         try:
             change()
             self.on_change()
         except (ValueError, OSError) as error:
             self.journal.logs[:] = original_logs
+            self.journal.sessions[:] = original_sessions
             messagebox.showerror("Не удалось сохранить", str(error), parent=self.window)
             return
         self.refresh()
@@ -112,6 +126,12 @@ class ExerciseHistoryWindow:
             return
         values = {key: field.get() for key, field in self.fields.items()}
         values["log_date"] = values.pop("date")
+        original = self.journal.logs[self.selected_index]
+        if values["log_date"].strip() != original.date:
+            if not messagebox.askyesno("Перенести всю отработку?",
+                                       "Дата изменится у всех результатов этой отработки. Продолжить?",
+                                       parent=self.window):
+                return
         self.apply_change(lambda: self.journal.update_tempo_log(self.selected_index, **values))
 
     def delete_record(self):

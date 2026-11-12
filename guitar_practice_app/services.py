@@ -1,9 +1,10 @@
 from datetime import date, timedelta
 from dataclasses import replace
 from math import ceil
+from uuid import NAMESPACE_URL, uuid4, uuid5
 
 from guitar_practice_app.cycles import cycle_start
-from guitar_practice_app.models import Exercise, GoalProgress, PracticePlanItem, TempoLog
+from guitar_practice_app.models import Exercise, GoalProgress, PracticePlanItem, PracticeSession, TempoLog
 from guitar_practice_app.settings import DEFAULT_DURATIONS
 from guitar_practice_app.tempo import duration_label, normalized_tempo
 
@@ -13,9 +14,22 @@ class DuplicateExerciseError(ValueError):
 
 
 class Journal:
-    def __init__(self, exercises=None, logs=None):
+    def __init__(self, exercises=None, logs=None, sessions=None):
         self.exercises = list(exercises or [])
         self.logs = list(logs or [])
+        self.sessions = list(sessions or [])
+        # Legacy results on one date formed one completed practice session.
+        known = {session.id: session for session in self.sessions}
+        for index, log in enumerate(self.logs):
+            session_id = log.session_id or str(uuid5(NAMESPACE_URL, f"guitar-practice:{log.exercise}:{log.date}"))
+            if session_id not in known:
+                session = PracticeSession(session_id, log.exercise, log.date, "completed")
+                known[session_id] = session
+                self.sessions.append(session)
+            session = known[session_id]
+            if session.exercise != log.exercise or session.date != log.date:
+                raise ValueError("Результат не соответствует своей отработке.")
+            self.logs[index] = replace(log, session_id=session_id)
 
     def add_exercise(self, name, description=""):
         name = name.strip()
@@ -79,8 +93,48 @@ class Journal:
         if selected.archived:
             raise ValueError("Упражнение в архиве. Сначала восстановите его.")
         log = self._make_tempo_log(exercise, tempo, duration, log_date, success, fail)
+        session = PracticeSession(str(uuid4()), log.exercise, log.date, "completed")
+        self.sessions.append(session)
+        log = replace(log, session_id=session.id)
         self.logs.append(log)
         return log
+
+    def session_by_id(self, session_id):
+        return next((session for session in self.sessions if session.id == session_id), None)
+
+    def session_results(self, session_id):
+        return [(index, log) for index, log in enumerate(self.logs) if log.session_id == session_id]
+
+    def sessions_for_exercise(self, exercise):
+        indexed = [(index, session) for index, session in enumerate(self.sessions) if session.exercise == exercise]
+        return [session for _, session in sorted(indexed, key=lambda item: (item[1].date, item[0]), reverse=True)]
+
+    def append_session_result(self, exercise, tempo, duration, log_date, success, fail, session_id=None):
+        selected = self.exercise_by_name(exercise)
+        if selected.archived:
+            raise ValueError("Упражнение в архиве. Сначала восстановите его.")
+        log = self._make_tempo_log(exercise, tempo, duration, log_date, success, fail)
+        if log.success + log.fail == 0:
+            raise ValueError("Нет попыток для сохранения.")
+        session = self.session_by_id(session_id)
+        if session is None:
+            if session_id is not None:
+                raise ValueError("Отработка не найдена.")
+            session = PracticeSession(str(uuid4()), exercise, log.date)
+            self.sessions.append(session)
+        elif session.status != "in_progress" or session.exercise != exercise or session.date != log.date:
+            raise ValueError("Упражнение и дата текущей отработки уже зафиксированы.")
+        log = replace(log, session_id=session.id)
+        self.logs.append(log)
+        return log
+
+    def set_session_status(self, session_id, status):
+        session = self.session_by_id(session_id)
+        if session is None or not self.session_results(session_id):
+            raise ValueError("Нет результатов для завершения отработки.")
+        replacement = replace(session, status=status)
+        self.sessions[self.sessions.index(session)] = replacement
+        return replacement
 
     def exercise_history(self, exercise):
         """Return (list index, record) pairs, newest first, including duplicates."""
@@ -93,6 +147,13 @@ class Journal:
         replacement = self._make_tempo_log(
             original.exercise, tempo, duration, log_date, success, fail,
         )
+        replacement = replace(replacement, session_id=original.session_id)
+        if replacement.date != original.date:
+            session = self.session_by_id(original.session_id)
+            if session is not None:
+                self.sessions[self.sessions.index(session)] = replace(session, date=replacement.date)
+            self.logs[:] = [replace(log, date=replacement.date) if log.session_id == original.session_id else log
+                            for log in self.logs]
         self.logs[index] = replacement
         return replacement
 
@@ -103,7 +164,10 @@ class Journal:
 
     def delete_tempo_log(self, index):
         self._log_at(index)
-        return self.logs.pop(index)
+        removed = self.logs.pop(index)
+        if not self.session_results(removed.session_id):
+            self.sessions[:] = [session for session in self.sessions if session.id != removed.session_id]
+        return removed
 
     def add_practice_session(self, exercise, tempo, duration, log_date, stats):
         return self.add_tempo_log(
@@ -272,20 +336,26 @@ class Journal:
         week_start = as_of - timedelta(days=6)
         count = 0
 
-        for log in self.logs_for_exercise(exercise):
-            log_date = date.fromisoformat(log.date)
-            if week_start <= log_date <= as_of:
+        for session in self.sessions:
+            log_date = date.fromisoformat(session.date)
+            if session.exercise == exercise and week_start <= log_date <= as_of and self.session_results(session.id):
                 count += 1
 
         return count
 
-    def practice_plan(self, as_of=None):
+    def practice_plan(self, as_of=None, active_session_id=None):
         as_of = as_of or date.today()
         items = []
 
         for exercise in self.exercise_names():
-            if self.goal_progress(exercise, as_of=as_of).reached:
-                continue
+            active = self.session_by_id(active_session_id)
+            pinned = active is not None and active.exercise == exercise and active.status == "in_progress"
+            if not pinned:
+                if self.goal_progress(exercise, as_of=as_of).reached:
+                    continue
+                if any(session.exercise == exercise and session.status == "completed"
+                       and session.date >= as_of.isoformat() for session in self.sessions):
+                    continue
             last_log = self.last_log(exercise)
             start_tempo = None
             start_duration = ""
@@ -293,8 +363,6 @@ class Journal:
             last_date = ""
 
             if last_log:
-                if date.fromisoformat(last_log.date) >= as_of:
-                    continue
                 start_tempo = ceil(last_log.tempo * 0.9)
                 start_duration = duration_label(last_log.duration)
                 last_tempo = self.format_tempo(last_log)
