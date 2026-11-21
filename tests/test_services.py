@@ -141,7 +141,8 @@ class AttemptStatsTest(unittest.TestCase):
         for _ in range(5):
             stats.add_success()
 
-        self.assertEqual(stats.decision(), ("Прибавляем", "green"))
+        self.assertEqual(stats.success_streak, 5)
+        self.assertEqual(stats.percentages(), (100.0, 0.0))
 
     def test_fail_streak_suggests_decrease(self):
         stats = AttemptStats()
@@ -149,7 +150,8 @@ class AttemptStatsTest(unittest.TestCase):
         for _ in range(5):
             stats.add_fail()
 
-        self.assertEqual(stats.decision(), ("Убавляем", "red"))
+        self.assertEqual(stats.fail_streak, 5)
+        self.assertEqual(stats.percentages(), (0.0, 100.0))
 
 
 if __name__ == "__main__":

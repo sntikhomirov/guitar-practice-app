@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "exercises": [
     {
       "name": "Название упражнения",
@@ -23,10 +23,36 @@
       "date": "2026-10-01",
       "success": 8,
       "fail": 2,
-      "session_id": "example-session-1"
+      "session_id": "example-session-1",
+      "exact": false
+    },
+    {
+      "exercise": "Название упражнения",
+      "tempo": 110,
+      "duration": "восьмые",
+      "date": "2026-11-21",
+      "success": 1,
+      "fail": 0,
+      "session_id": "example-session-2",
+      "scope_id": "",
+      "approach_id": "example-approach-1",
+      "exact": true
     }
   ],
   "sessions": [
-    {"id": "example-session-1", "exercise": "Название упражнения", "date": "2026-10-01", "status": "completed"}
-  ]
+    {"id": "example-session-1", "exercise": "Название упражнения", "date": "2026-10-01", "status": "completed"},
+    {"id": "example-session-2", "exercise": "Название упражнения", "date": "2026-11-21", "status": "completed"}
+  ],
+  "attempts": [
+    {
+      "id": "example-attempt-1", "sequence": 1,
+      "exercise": "Название упражнения", "tempo": 110, "duration": "восьмые",
+      "success": true, "recorded_at": "2026-11-21T12:00:00+03:00",
+      "session_id": "example-session-2", "approach_id": "example-approach-1", "scope_id": ""
+    }
+  ],
+  "fragments": [
+    {"id": "example-fragment-1", "exercise": "Название упражнения", "name": "Переход"}
+  ],
+  "settings": {"stability_window": 30, "next_attempt_sequence": 2}
 }

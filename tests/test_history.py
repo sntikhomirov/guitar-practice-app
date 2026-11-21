@@ -9,20 +9,20 @@ from guitar_practice_app.services import AttemptStats, Journal
 
 
 class CounterRegressionTest(unittest.TestCase):
-    def test_five_successes_after_failure_do_not_suggest_increase(self):
+    def test_five_successes_after_failure_preserve_actual_counts(self):
         stats = AttemptStats()
         stats.add_fail()
         for _ in range(5):
             stats.add_success()
         self.assertEqual(stats.success_streak, 5)
-        self.assertEqual(stats.decision()[0], "")
+        self.assertEqual((stats.success, stats.fail), (5, 1))
 
-    def test_success_percentage_can_still_suggest_increase_after_failure(self):
+    def test_percentages_use_actual_attempt_count(self):
         stats = AttemptStats()
         stats.add_fail()
         for _ in range(7):
             stats.add_success()
-        self.assertEqual(stats.decision()[0], "Прибавляем")
+        self.assertEqual(stats.percentages(), (87.5, 12.5))
 
 
 class ExerciseHistoryTest(unittest.TestCase):
@@ -99,6 +99,8 @@ class HistoryWorkflowTest(unittest.TestCase):
         app.refresh_journal_table = Mock()
         app.refresh_practice_plan = Mock()
         app.sync_session_date = Mock()
+        app.practice = Mock()
+        app.update_stats = Mock()
         app.stats.add_success()
         app.on_history_changed()
         app.refresh_practice_plan.assert_called_once_with(prefill=False)
@@ -110,6 +112,8 @@ class HistoryWorkflowTest(unittest.TestCase):
         app.refresh_journal_table = Mock()
         app.refresh_practice_plan = Mock()
         app.sync_session_date = Mock()
+        app.practice = Mock()
+        app.update_stats = Mock()
         app.on_history_changed()
         app.refresh_practice_plan.assert_called_once_with(prefill=True)
 
