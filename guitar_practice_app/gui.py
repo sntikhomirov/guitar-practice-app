@@ -1,13 +1,12 @@
 import json
 import tkinter as tk
 from datetime import date
-from tkinter import messagebox, ttk
+from tkinter import messagebox, simpledialog, ttk
 
 from guitar_practice_app.archive_ui import ExerciseArchiveWindow
 from guitar_practice_app.history_ui import ExerciseHistoryWindow
 from guitar_practice_app.goals_ui import ExerciseGoalsPanel
 from guitar_practice_app.practice import PracticeController
-from guitar_practice_app.unsaved_ui import ask_unsaved_attempts
 from guitar_practice_app.services import AttemptStats, DuplicateExerciseError, Journal
 from guitar_practice_app.settings import DATA_FILE, DEFAULT_DURATIONS
 from guitar_practice_app.storage import JournalStorage
@@ -43,12 +42,12 @@ class GuitarPracticeApp:
         self.notebook.add(self.goals_tab, text="Цели")
 
         self.create_counter_tab()
-        self.update_stats()
         self.create_journal_tab()
         self.create_goals_tab()
         self.refresh_exercise_list()
         self.refresh_journal_table()
         self.refresh_practice_plan()
+        self.update_stats()
         self.root.protocol("WM_DELETE_WINDOW", self.close_app)
 
     def configure_style(self):
@@ -61,9 +60,8 @@ class GuitarPracticeApp:
 
     def load_journal(self):
         try:
-            exercises, logs, sessions = self.storage.load_state()
-            return Journal(exercises=exercises, logs=logs, sessions=sessions)
-        except (json.JSONDecodeError, OSError, ValueError):
+            return self.storage.load_journal()
+        except (json.JSONDecodeError, OSError, ValueError, TypeError, KeyError):
             self._storage_load_failed = True
             messagebox.showwarning(
                 "Журнал занятий",
@@ -74,7 +72,7 @@ class GuitarPracticeApp:
     def save_journal(self):
         if self._storage_load_failed:
             raise OSError("Журнал не загружен. Проверьте исходный файл перед сохранением.")
-        self.storage.save(self.journal.exercises, self.journal.logs, self.journal.sessions)
+        self.storage.save_journal(self.journal)
 
     def create_counter_tab(self):
         self.counter_tab.columnconfigure(0, weight=1)
@@ -112,19 +110,31 @@ class GuitarPracticeApp:
         self.session_duration_combobox.grid(row=2, column=1, sticky="ew", padx=8, pady=5)
         self.session_duration_combobox.bind("<<ComboboxSelected>>", self.on_session_parameters_changed)
 
-        ttk.Label(session_frame, text="Дата:").grid(row=3, column=0, sticky="w", padx=8, pady=5)
+        ttk.Label(session_frame, text="Дата:").grid(row=3, column=0, sticky="w", padx=8, pady=3)
         self.session_date_entry = ttk.Entry(session_frame)
         self.session_date_entry.insert(0, date.today().isoformat())
         self.session_date_entry.grid(row=3, column=1, sticky="ew", padx=8, pady=5)
         self.session_date_entry.bind("<Return>", self.on_session_parameters_changed)
 
+        ttk.Label(session_frame, text="Область:").grid(row=4, column=0, sticky="w", padx=8, pady=3)
+        scope_frame = ttk.Frame(session_frame, padding=0)
+        scope_frame.grid(row=4, column=1, sticky="ew", padx=8)
+        scope_frame.columnconfigure(0, weight=1)
+        self.scope_combobox = ttk.Combobox(scope_frame, state="readonly", width=18)
+        self.scope_combobox.grid(row=0, column=0, sticky="ew")
+        self.scope_combobox.bind("<<ComboboxSelected>>", self.on_session_parameters_changed)
+        ttk.Button(scope_frame, text="+", width=3, command=self.add_fragment).grid(row=0, column=1, padx=2)
+        self.scope_ids = [""]
+        self.scope_combobox["values"] = ["Целое упражнение"]
+        self.scope_combobox.current(0)
+
         actions = ttk.Frame(session_frame, padding=0)
-        actions.grid(row=4, column=0, columnspan=2, sticky="ew", padx=8, pady=(8, 4))
+        actions.grid(row=5, column=0, columnspan=2, sticky="ew", padx=8, pady=(4, 2))
         actions.columnconfigure(0, weight=1)
         actions.columnconfigure(1, weight=1)
         ttk.Button(
             actions,
-            text="Сохранить результат",
+             text="Сохранить результат",
             style="Primary.TButton",
             command=self.save_practice_session,
         ).grid(row=0, column=0, sticky="ew", padx=(0, 4))
@@ -146,7 +156,7 @@ class GuitarPracticeApp:
         self.label_fail.grid(row=1, column=0, pady=5)
 
         self.label_decision = tk.Label(
-            stats_frame, text="", font=("Arial", 14), fg="green"
+            stats_frame, text="", font=("Arial", 11), fg="green", wraplength=460
         )
         self.label_decision.grid(row=2, column=0, pady=5)
 
@@ -173,10 +183,12 @@ class GuitarPracticeApp:
 
         tk.Button(
             stats_frame,
-            text="Сбросить статистику",
+            text="Сбросить счётчик (попытки сохранятся)",
             font=("Arial", 10),
             command=self.reset,
-        ).grid(row=4, column=0, pady=5)
+        ).grid(row=4, column=0, pady=2)
+        ttk.Button(stats_frame, text="Стабильность по темпам",
+                   command=lambda: self.open_stability(self.session_exercise_combobox.get())).grid(row=5, column=0, pady=2)
 
         self.create_practice_plan_panel(counter_frame)
 
@@ -199,6 +211,8 @@ class GuitarPracticeApp:
         self.history_exercise_combobox = ttk.Combobox(history_bar, state="readonly", width=30)
         self.history_exercise_combobox.pack(side="left", padx=8)
         ttk.Button(history_bar, text="Открыть историю", command=self.open_exercise_history).pack(side="left")
+        ttk.Button(history_bar, text="Стабильность",
+                   command=lambda: self.open_stability(self.history_exercise_combobox.get())).pack(side="left", padx=4)
         ttk.Button(history_bar, text="В архив", command=self.archive_selected_exercise).pack(side="left", padx=8)
         ttk.Button(history_bar, text="Архив упражнений", command=self.open_archive).pack(side="right")
 
@@ -269,9 +283,58 @@ class GuitarPracticeApp:
 
     def on_history_changed(self):
         self.save_journal()
+        self.practice.sync_stats()
         self.refresh_journal_table()
         self.refresh_practice_plan(prefill=self.stats.total() == 0)
         self.sync_session_date()
+        self.update_stats()
+
+    def open_stability(self, exercise):
+        if not exercise:
+            messagebox.showerror("Стабильность", "Выберите упражнение.")
+            return
+        from guitar_practice_app.stability_ui import StabilityWindow
+
+        StabilityWindow(self.root, self.journal, exercise, self.practice,
+                        self.save_journal, self.refresh_after_attempt_edit, protected_path=self.storage.path)
+
+    def refresh_after_attempt_edit(self):
+        exercise = self.session_exercise_combobox.get()
+        scope = self.current_scope_id()
+        self.refresh_scopes(exercise, scope)
+        self.practice.sync_stats()
+        self.refresh_journal_table()
+        self.refresh_practice_plan(prefill=self.practice.session is None)
+        self.sync_session_date()
+        self.update_stats()
+
+    def current_scope_id(self):
+        index = self.scope_combobox.current()
+        return self.scope_ids[index] if 0 <= index < len(self.scope_ids) else ""
+
+    def refresh_scopes(self, exercise, scope_id=""):
+        fragments = self.journal.fragments_for(exercise)
+        self.scope_ids = [""] + [fragment.id for fragment in fragments]
+        self.scope_combobox["values"] = ["Целое упражнение"] + [fragment.name for fragment in fragments]
+        self.scope_combobox.current(self.scope_ids.index(scope_id) if scope_id in self.scope_ids else 0)
+
+    def add_fragment(self):
+        exercise = self.session_exercise_combobox.get()
+        if not exercise:
+            messagebox.showerror("Фрагмент", "Выберите упражнение.")
+            return
+        name = simpledialog.askstring("Новый фрагмент", "Название фрагмента:", parent=self.root)
+        if name is None:
+            return
+        snapshot = self.journal.snapshot()
+        try:
+            self.journal.save_fragment(exercise, name)
+            self.save_journal()
+        except (ValueError, OSError) as error:
+            self.journal.restore(snapshot)
+            messagebox.showerror("Фрагмент", str(error))
+            return
+        self.refresh_scopes(exercise, self.current_scope_id())
 
     def create_exercise_form(self, parent):
         exercise_frame = ttk.LabelFrame(parent, text="Добавить упражнение")
@@ -442,14 +505,10 @@ class GuitarPracticeApp:
         self.refresh_practice_plan(prefill=True)
 
     def save_practice_session(self):
-        previous_count = len(self.journal.logs)
         if not self.resolve_session_parameters():
             return
         try:
-            # The parameter guard may already have saved the previous tempo.
-            # Do not save twice or report an empty-counter error in that case.
-            if self.stats.total() or len(self.journal.logs) == previous_count:
-                self.practice.save_result(*self.read_session_parameters())
+            self.practice.save_result()
         except (ValueError, OSError) as error:
             messagebox.showerror("Ошибка", str(error))
             return
@@ -457,13 +516,13 @@ class GuitarPracticeApp:
         self.refresh_journal_table()
         self.refresh_practice_plan(prefill=False)
         self.sync_session_date()
-        self.session_status.configure(text="Результат сохранён. Можно продолжить на другом темпе.")
+        self.session_status.configure(text="Подход завершён. Все попытки уже сохранены.")
 
     def finish_exercise(self):
         if not self.resolve_session_parameters():
             return
         try:
-            self.practice.finish(*self.read_session_parameters())
+            self.practice.finish()
         except (ValueError, OSError) as error:
             messagebox.showerror("Ошибка", str(error))
             return
@@ -475,14 +534,15 @@ class GuitarPracticeApp:
 
     def read_session_parameters(self):
         return (self.session_exercise_combobox.get(), self.session_tempo_entry.get(),
-                self.session_duration_combobox.get(), self.session_date_entry.get())
+                self.session_duration_combobox.get(), self.session_date_entry.get(), self.current_scope_id())
 
     def write_session_parameters(self, values):
-        exercise, tempo, duration, log_date = values
+        exercise, tempo, duration, log_date, scope_id = values
         self.session_exercise_combobox.set(exercise)
         self.session_tempo_entry.delete(0, "end")
         self.session_tempo_entry.insert(0, str(tempo))
         self.session_duration_combobox.set(duration)
+        self.refresh_scopes(exercise, scope_id)
         self.session_date_entry.configure(state="normal")
         self.session_date_entry.delete(0, "end")
         self.session_date_entry.insert(0, log_date)
@@ -498,7 +558,8 @@ class GuitarPracticeApp:
             self.session_date_entry.configure(state="readonly")
         if self._session_parameters is not None:
             # A history refresh must not confirm pending edits to other fields.
-            self._session_parameters = (*self._session_parameters[:3], self.session_date_entry.get())
+            self._session_parameters = (*self._session_parameters[:3], self.session_date_entry.get(),
+                                        self._session_parameters[4])
 
     def on_session_parameters_changed(self, event=None):
         self.resolve_session_parameters()
@@ -508,28 +569,18 @@ class GuitarPracticeApp:
             return True
         new = self.read_session_parameters()
         old = self._session_parameters
+        if old is not None and old[0] != new[0]:
+            new = (*new[:3], date.today().isoformat(), "")
         if old is None or old == new:
             self._session_parameters = new
             return True
         self._changing_parameters = True
         try:
-            if self.stats.total():
-                answer = ask_unsaved_attempts(self.root)
-                if answer is None:
-                    self.write_session_parameters(old)
-                    return False
-                if answer == "save":
-                    self.practice.save_result(*old)
-                    self.refresh_journal_table()
-                else:
-                    self.stats.reset()
-                self.update_stats()
-            if old[0] != new[0]:
-                self.practice.interrupt()
-                new = (*new[:3], date.today().isoformat())
-            elif self.practice.session is not None and self.practice.session.date != new[3]:
-                new = (*new[:3], self.practice.session.date)
+            if old[0] == new[0] and self.practice.session is not None:
+                new = (*new[:3], self.practice.session.date, new[4])
+            self.practice.change_parameters(old, new)
             self.write_session_parameters(new)
+            self.update_stats()
             self.refresh_practice_plan(prefill=False)
             return True
         except (ValueError, OSError) as error:
@@ -544,13 +595,6 @@ class GuitarPracticeApp:
             return
         self._changing_parameters = True
         try:
-            if self.stats.total():
-                answer = ask_unsaved_attempts(self.root, closing=True)
-                if answer is None:
-                    return
-                if answer == "save":
-                    self.practice.save_result(*(self._session_parameters or self.read_session_parameters()))
-                    self.update_stats()
             self.practice.interrupt()
             self.root.destroy()
         except (ValueError, OSError) as error:
@@ -613,6 +657,7 @@ class GuitarPracticeApp:
         self.session_tempo_entry.delete(0, "end")
         self.session_date_entry.delete(0, "end")
         self.session_date_entry.insert(0, date.today().isoformat())
+        self.refresh_scopes(plan[0].exercise if plan else "")
 
         if not plan:
             self.session_exercise_combobox.set("")
@@ -640,9 +685,14 @@ class GuitarPracticeApp:
 
     def update_stats(self):
         p_success, p_fail = self.stats.percentages()
-        decision, color = self.stats.decision()
-
-        self.label_decision.config(text=decision, fg=color)
+        exercise, tempo, duration, _, scope_id = self.read_session_parameters()
+        try:
+            result = self.journal.stability(exercise, int(tempo), duration, scope_id, self.practice.session_id)
+            color = "green" if result.status == "Повышение разрешено" else "#555555"
+            self.label_decision.config(
+                text=f"{result.status} · окно {result.successes}/{result.total} из {result.window_size}", fg=color)
+        except ValueError:
+            self.label_decision.config(text="Укажите темп для оценки стабильности", fg="#555555")
         self.label_success.config(
             text=f"Удачно: {self.stats.success} ({p_success}%)\nStreak: {self.stats.success_streak}"
         )
@@ -651,19 +701,27 @@ class GuitarPracticeApp:
         )
 
     def add_success(self):
-        if not self.resolve_session_parameters():
-            return
-        self.stats.add_success()
-        self.update_stats()
+        self.record_attempt(True)
 
     def add_fail(self):
+        self.record_attempt(False)
+
+    def record_attempt(self, success):
         if not self.resolve_session_parameters():
             return
-        self.stats.add_fail()
+        exercise, tempo, duration, log_date, scope_id = self.read_session_parameters()
+        try:
+            self.practice.record_attempt(exercise, tempo, duration, log_date, success, scope_id)
+        except (ValueError, OSError) as error:
+            messagebox.showerror("Попытка не сохранена", str(error), parent=self.root)
+            return
+        self.sync_session_date()
+        self.refresh_journal_table()
+        self.refresh_practice_plan(prefill=False)
         self.update_stats()
 
     def reset(self):
-        self.stats.reset()
+        self.practice.reset_counter()
         self.update_stats()
 
 

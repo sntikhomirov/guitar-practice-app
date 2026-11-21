@@ -7,14 +7,15 @@ from guitar_practice_app.cycles import cycle_start
 from guitar_practice_app.models import Exercise, GoalProgress, PracticePlanItem, PracticeSession, TempoLog
 from guitar_practice_app.settings import DEFAULT_DURATIONS
 from guitar_practice_app.tempo import duration_label, normalized_tempo
+from guitar_practice_app.stability import StabilityJournal
 
 
 class DuplicateExerciseError(ValueError):
     pass
 
 
-class Journal:
-    def __init__(self, exercises=None, logs=None, sessions=None):
+class Journal(StabilityJournal):
+    def __init__(self, exercises=None, logs=None, sessions=None, attempts=None, fragments=None, settings=None):
         self.exercises = list(exercises or [])
         self.logs = list(logs or [])
         self.sessions = list(sessions or [])
@@ -30,6 +31,7 @@ class Journal:
             if session.exercise != log.exercise or session.date != log.date:
                 raise ValueError("Результат не соответствует своей отработке.")
             self.logs[index] = replace(log, session_id=session_id)
+        self.init_stability(attempts, fragments, settings)
 
     def add_exercise(self, name, description=""):
         name = name.strip()
@@ -147,7 +149,11 @@ class Journal:
         replacement = self._make_tempo_log(
             original.exercise, tempo, duration, log_date, success, fail,
         )
-        replacement = replace(replacement, session_id=original.session_id)
+        if original.exact and (replacement.tempo, replacement.duration, replacement.success, replacement.fail) != (
+                original.tempo, original.duration, original.success, original.fail):
+            raise ValueError("Точная запись вычисляется из попыток. Исправьте попытку в окне «Стабильность».")
+        replacement = replace(replacement, session_id=original.session_id, scope_id=original.scope_id,
+                              approach_id=original.approach_id, exact=original.exact)
         if replacement.date != original.date:
             session = self.session_by_id(original.session_id)
             if session is not None:
@@ -163,7 +169,8 @@ class Journal:
         return self.logs[index]
 
     def delete_tempo_log(self, index):
-        self._log_at(index)
+        if self._log_at(index).exact:
+            raise ValueError("Удалите исходные попытки в окне «Стабильность», а не вычисленный итог.")
         removed = self.logs.pop(index)
         if not self.session_results(removed.session_id):
             self.sessions[:] = [session for session in self.sessions if session.id != removed.session_id]
@@ -238,7 +245,7 @@ class Journal:
     def goal_progress(self, name, kind="weekly", as_of=None):
         as_of = as_of or date.today()
         exercise = self.exercise_by_name(name)
-        logs = self.logs_for_exercise(name)
+        logs = self.whole_logs(name)
         start = ""
         if kind == "total":
             tempo, duration = exercise.total_target_tempo, exercise.total_target_duration
@@ -274,7 +281,7 @@ class Journal:
         return f"{self.format_tempo(log)} (={normalized})"
 
     def max_normalized_tempo(self, exercise):
-        logs = [log for log in self.logs if log.exercise == exercise]
+        logs = self.whole_logs(exercise)
         if not logs:
             return 0
 
@@ -284,7 +291,7 @@ class Journal:
         return max(logs, key=lambda log: normalized_tempo(log.tempo, log.duration))
 
     def max_tempo_text(self, exercise):
-        logs = [log for log in self.logs if log.exercise == exercise]
+        logs = self.whole_logs(exercise)
         if not logs:
             return ""
 
@@ -294,7 +301,7 @@ class Journal:
         logs = [
             log
             for log in self.logs
-            if log.date == log_date and log.exercise == exercise
+            if log.date == log_date and log.exercise == exercise and not log.scope_id
         ]
         if not logs:
             return ""
@@ -308,7 +315,7 @@ class Journal:
 
         rows = [["Максимум"] + [self.max_tempo_text(exercise) for exercise in exercises]]
         active_names = set(exercises)
-        dates = sorted({log.date for log in self.logs if log.exercise in active_names}, reverse=True)
+        dates = sorted({log.date for log in self.logs if log.exercise in active_names and not log.scope_id}, reverse=True)
 
         for log_date in dates:
             rows.append(
@@ -320,11 +327,14 @@ class Journal:
     def logs_for_exercise(self, exercise):
         return [log for log in self.logs if log.exercise == exercise]
 
+    def whole_logs(self, exercise):
+        return [log for log in self.logs_for_exercise(exercise) if not log.scope_id]
+
     def last_log(self, exercise):
         logs_with_index = [
             (index, log)
             for index, log in enumerate(self.logs)
-            if log.exercise == exercise
+            if log.exercise == exercise and not log.scope_id
         ]
         if not logs_with_index:
             return None
@@ -419,23 +429,7 @@ class AttemptStats:
         if total == 0:
             return 0.0, 0.0
 
-        base = 10 if total < 10 else total
-        return round((self.success / base) * 100, 1), round((self.fail / base) * 100, 1)
+        return round((self.success / total) * 100, 1), round((self.fail / total) * 100, 1)
 
     def total(self):
         return self.success + self.fail
-
-    def decision(self):
-        total = self.success + self.fail
-        if total == 0:
-            return "", "green"
-
-        p_success, p_fail = self.percentages()
-
-        if p_fail > 50 or total > 30 or self.fail_streak >= 5:
-            return "Убавляем", "red"
-
-        if p_success >= 70 or (self.success_streak >= 5 and self.fail == 0):
-            return "Прибавляем", "green"
-
-        return "", "green"

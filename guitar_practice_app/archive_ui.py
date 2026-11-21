@@ -51,7 +51,7 @@ class ExerciseArchiveWindow:
         exercises = self.journal.archived_exercises()
         for index, exercise in enumerate(exercises):
             logs = self.journal.logs_for_exercise(exercise.name)
-            last = self.journal.last_log(exercise.name)
+            last = max(logs, key=lambda log: log.date) if logs else None
             self.table.insert("", "end", iid=str(index), values=(
                 exercise.name, len(logs), last.date if last else "—",
             ))

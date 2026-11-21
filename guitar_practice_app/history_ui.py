@@ -77,7 +77,10 @@ class ExerciseHistoryWindow:
             self.table.insert("", "end", iid=parent, text=f"Отработка {len(sessions) - number} · {statuses[session.status]}",
                               open=True, values=(session.date, "", "", "", ""))
             for index, log in self.journal.session_results(session.id):
-                self.table.insert(parent, "end", iid=str(index), text="Результат", values=(
+                text = ("Из попыток" if log.exact else "Исторический агрегат")
+                if log.scope_id:
+                    text += f" · {self.journal.scope_name(log.exercise, log.scope_id)}"
+                self.table.insert(parent, "end", iid=str(index), text=text, values=(
                     log.date, self.journal.format_tempo(log),
                     normalized_tempo(log.tempo, log.duration), log.success, log.fail,
                 ))
@@ -85,6 +88,7 @@ class ExerciseHistoryWindow:
             if isinstance(field, ttk.Combobox):
                 field.set("")
             else:
+                field.configure(state="normal")
                 field.delete(0, "end")
         self.save_button.state(["disabled"])
         self.delete_button.state(["disabled"])
@@ -100,13 +104,16 @@ class ExerciseHistoryWindow:
         log = self.journal.logs[self.selected_index]
         for key, field in self.fields.items():
             value = str(getattr(log, key))
+            field.configure(state="readonly" if isinstance(field, ttk.Combobox) else "normal")
             if isinstance(field, ttk.Combobox):
                 field.set(value)
             else:
                 field.delete(0, "end")
                 field.insert(0, value)
+            if log.exact and key != "date":
+                field.configure(state="disabled" if isinstance(field, ttk.Combobox) else "readonly")
         self.save_button.state(["!disabled"])
-        self.delete_button.state(["!disabled"])
+        self.delete_button.state(["disabled"] if log.exact else ["!disabled"])
 
     def apply_change(self, change):
         original_logs = list(self.journal.logs)

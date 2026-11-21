@@ -1,5 +1,5 @@
 from dataclasses import asdict, dataclass
-from datetime import date
+from datetime import date, datetime
 from typing import Optional
 
 from guitar_practice_app.cycles import cycle_start
@@ -106,6 +106,9 @@ class TempoLog:
     success: int = 0
     fail: int = 0
     session_id: str = ""
+    scope_id: str = ""
+    approach_id: str = ""
+    exact: bool = False
 
     @classmethod
     def from_dict(cls, data):
@@ -117,6 +120,9 @@ class TempoLog:
             success=int(data.get("success", 0)),
             fail=int(data.get("fail", 0)),
             session_id=data.get("session_id", ""),
+            scope_id=data.get("scope_id", ""),
+            approach_id=data.get("approach_id", ""),
+            exact=data.get("exact", False),
         )
 
     def to_dict(self):
@@ -139,6 +145,44 @@ class PracticeSession:
     @classmethod
     def from_dict(cls, data):
         return cls(**data)
+
+    def to_dict(self):
+        return asdict(self)
+
+
+@dataclass(frozen=True)
+class Fragment:
+    id: str
+    exercise: str
+    name: str
+
+    def to_dict(self):
+        return asdict(self)
+
+
+@dataclass(frozen=True)
+class Attempt:
+    id: str
+    sequence: int
+    exercise: str
+    tempo: int
+    duration: str
+    success: bool
+    recorded_at: str
+    session_id: str
+    approach_id: str
+    scope_id: str = ""
+
+    def __post_init__(self):
+        if not all((self.id, self.exercise, self.session_id, self.approach_id)):
+            raise ValueError("У попытки отсутствуют обязательные идентификаторы.")
+        if type(self.sequence) is not int or self.sequence <= 0:
+            raise ValueError("Некорректный порядок попытки.")
+        if type(self.success) is not bool:
+            raise ValueError("Результат попытки должен быть логическим значением.")
+        validate_goal(self.tempo, self.duration)
+        if self.tempo is None or datetime.fromisoformat(self.recorded_at).utcoffset() is None:
+            raise ValueError("Попытка должна содержать темп и время с часовым поясом.")
 
     def to_dict(self):
         return asdict(self)
